@@ -10,7 +10,6 @@
 | --- | --- | --- |
 | [dsh-turn-chime](plugins/dsh-turn-chime/) | 一轮结束、模型反问时各响一声 | 自制 |
 | [dsh-auto-archive](plugins/dsh-auto-archive/) | 启动时归档闲置会话 | 自制 |
-| [dsh-ops](plugins/dsh-ops/SOURCE.md) | 原生文件与 Bash 工具层 | npm 0.5.4 |
 | [superpowers-dsh](plugins/superpowers-dsh/SOURCE.md) | 技能与工作流：TDD、调试、计划、并行子代理、代码评审 | npm 0.5.0 |
 | [dsh-memory-evolve](plugins/dsh-memory-evolve/SOURCE.md) | 记忆、待办 | github |
 | [dsh-talk-map-local](plugins/dsh-talk-map-local/) | 会话地图，本地大改版 | 基于 github:Tasihi89/dsh-talk-map |
