@@ -29,6 +29,8 @@
 
 `humanizer-zh` 的历程：2026-11-09 从技能移到全局指令（正文并入 `config/AGENTS.md` 与 `~/.dsh/AGENTS.md`），2026-11-10 11:27 又从全局指令整段移除（本机备份 `~/.dsh/backups/AGENTS.md.before-remove-humanizer-20261110`）。需要原文时：`git show 28802bc:config/AGENTS.md` 取合并后的正文，`git checkout c8b7fa5 -- skills/humanizer-zh` 取最初的技能目录。
 
+2026-11-17：`config/AGENTS.md` 里的「证据优先，减少幻觉」与「写作规范（Humanizer-zh 分类版）」两块移到 `dsh-purewhite-toolkit` 插件的 `prompts/`，由插件的 `policies` 模块经系统提示词注入；AGENTS.md 只保留前面几节，写作规范的「来源」小节不再保留。旧版全文：`git show 922268f:config/AGENTS.md`。
+
 codex/grok/hermes/kimi-cli-calling 和 memory-consolidate 由 `dsh-memory-evolve` 启动时自动同步到 `~/.agents/skills`，不在仓库存储。
 
 ## 配置
