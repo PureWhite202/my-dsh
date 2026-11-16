@@ -239,3 +239,11 @@
       name: dsh-purewhite-toolkit/agent-mode-guard
       config:
         preset: agent-mode
+    # 提示词注入：把「证据优先，减少幻觉」与「写作规范（Humanizer-zh 分类版）」
+    # 两块长期规则放进系统提示词。正文在 prompts/*.md，改文案不用碰代码；
+    # 写作规范里的「来源」小节已按用户要求删除，不随注入带出去。
+    - id: policies
+      name: dsh-purewhite-toolkit/policies
+      config:
+        evidence: true
+        writing: true

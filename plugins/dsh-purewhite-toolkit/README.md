@@ -55,6 +55,34 @@
 - 内容：全自然语言。仓库与 SSH 连接信息、本机/云端各指什么、对比步骤、报告格式、只读与确认规矩、拉取/推送命令，都写在正文里
 - 关掉：配置项 `skills: false`
 
+## 提示词注入：证据优先 / 写作规范（2026-11-17 新增）
+
+把原本写在 `~/.dsh/AGENTS.md` 里的两块长期规则搬进本插件，由 `policies.js` 在组装系统提示词时注入。AGENTS.md 里不再保留这两段，也没有留指针。
+
+| 节名 | 正文文件 | 默认 order | 开关 |
+|---|---|---|---|
+| `policy:evidence-first` | `prompts/evidence-first.md` | 100 | `evidence` |
+| `policy:writing-style` | `prompts/writing-style.md` | 200 | `writing` |
+
+- 用 `ctx.systemPrompt.section()`（系统提示词正文），不是 `.context()`（每轮运行时上下文快照）。这两块是不变指令，进正文才吃前缀缓存，也不会每轮多一条消息。
+- 注册时带 `interpolate: false`：散文里的 `{{...}}` 不会被当成提示词变量（否则缺变量会让整个组装抛错）。
+- 写作规范里的「来源」小节（blader/humanizer、Humanizer-zh PR 39、stop-slop、Wikipedia）按要求删除，不随注入带出去。
+- 正文是普通 Markdown，直接改 `prompts/*.md` 就行，不用碰 JS。
+- 顺序落在 persona 前缀（0）之后、plan 策略（500）之前，与 genui 的 `genui:cards`（80）同一区间。
+
+配置（`cordis.patch.yml` 里 `policies` 行的 `config`）：
+
+| 键 | 默认 | 说明 |
+|---|---|---|
+| `evidence` | `true` | 是否注入「证据优先，减少幻觉」 |
+| `writing` | `true` | 是否注入「写作规范（Humanizer-zh 分类版）」 |
+| `evidenceOrder` / `writingOrder` | `100` / `200` | 两节在系统提示词里的排序值 |
+| `dir` | 插件目录下 `prompts` | 正文目录，相对路径按插件目录解析 |
+
+改完要让宿主重新组合才生效：在插件管理器里把 `dsh-purewhite-toolkit` 关一次再开，或者重启 DSH。
+
+单测：`node test/policies.test.mjs`（11 个场景：节名与顺序、正文核心规则、来源已删、两个开关、order 覆盖、目录缺失时降级告警、宿主没有 `systemPrompt` 时不抛错、注册走 `ctx.effect`）。
+
 ## 只读模式（Agent 预设 + 权限预设，2026-11-11 新增）
 
 bundle 里声明了一个 `readonly` Agent 预设（模式下拉里的「只读模式」），外加它的执行守卫 `readonly-guard.js`：

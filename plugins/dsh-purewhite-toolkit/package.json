@@ -9,6 +9,7 @@
     ".": "./index.js",
     "./readonly-guard": "./readonly-guard.js",
     "./agent-mode-guard": "./agent-mode-guard.js",
+    "./policies": "./policies.js",
     "./client": "./client.js",
     "./package.json": "./package.json"
   },
@@ -16,6 +17,8 @@
     "index.js",
     "readonly-guard.js",
     "agent-mode-guard.js",
+    "policies.js",
+    "prompts",
     "client.js",
     "cordis.patch.yml",
     "profile-snippet.yml",
