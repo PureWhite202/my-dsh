@@ -76,13 +76,15 @@ async function run(scenario) {
     },
   }
 
-  apply(ctx, {
-    minAgeHours: 24,
+  const config = {
     startupDelayMs: 1,
     dryRun: scenario.dryRun === true,
     reportPath,
     ...scenario.config,
-  })
+  }
+  // 用例默认按 24 小时夹具构造；传 null 表示不传，让插件使用自身默认阈值。
+  if (scenario.minAgeHours !== null) config.minAgeHours = scenario.minAgeHours ?? 24
+  apply(ctx, config)
 
   // 等 1ms 定时器 + 异步落盘。
   let report
@@ -185,6 +187,21 @@ async function run(scenario) {
   assert.ok(inject.includes('workspaceRegistry'))
   assert.ok(inject.includes('sessionController'))
   console.log('ok 5: 元数据')
+}
+
+// 6) 默认阈值：不传 minAgeHours 时按插件默认的 168 小时（1 周）判断。
+{
+  const { archivedCalls, report } = await run({
+    sessionIds: ['session-recent', 'session-stale'],
+    summaries: [
+      summary('session-recent', { updatedAt: now - 30 * HOUR }),
+      summary('session-stale', { updatedAt: now - 200 * HOUR }),
+    ],
+    minAgeHours: null,
+  })
+  assert.equal(report.thresholdHours, 168, '默认阈值应为 168 小时')
+  assert.deepEqual(archivedCalls, ['session-stale'], '一周内不归档，超过一周归档')
+  console.log('ok 6: 默认阈值一周')
 }
 
 console.log('all smoke tests passed')

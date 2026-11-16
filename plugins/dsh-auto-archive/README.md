@@ -6,7 +6,7 @@ DSH 插件：**每次启动时，把默认工作区里“超过设定时间没�
 
 ## 归档规则
 
-每次 DSH 启动后延迟 `startupDelayMs`（默认 3 秒，等界面恢复上次会话）执行一次：
+每次 DSH 启动后延迟 `startupDelayMs`（默认 8 秒，等界面恢复上次会话）执行一次：
 
 ```
 默认工作区会话
@@ -14,13 +14,13 @@ DSH 插件：**每次启动时，把默认工作区里“超过设定时间没�
   ∩ 未归档
   ∩ 当前没有 live agent / running
   ∩ 非子代理会话
-  ∩ 最后活动时间 > minAgeHours（默认 24 小时）
+  ∩ 最后活动时间 > minAgeHours（默认 168 小时，即 1 周）
   → 归档
 ```
 
 - **“最后活动时间”的口径与侧边栏一致**：取 `SessionSummary.updatedAt`，即
   `max(创建时间, 最后一条真实用户消息时间)`（DSH 的 `sessionListMetadata` 投影）。
-  所以“创建很久但昨天还在聊”的会话不会被误归档。
+  所以“创建很久但最近还在聊”的会话不会被误归档。
 - **置顶永不归档**。归档与置顶在 DSH 里互斥，归档会顺带清掉置顶，这里直接跳过置顶会话。
 - **正在用的会话跳过**：有 live agent、`running` 或正在被接入的会话不动；即使判断失误，
   `archiveSession` 对活动中会话会抛 `WorkspaceActiveSessionError`，插件捕获后跳过，不打断任务。
@@ -38,7 +38,7 @@ DSH 插件：**每次启动时，把默认工作区里“超过设定时间没�
 | 字段 | 默认 | 说明 |
 |---|---|---|
 | `enabled` | `true` | `false` 临时停用 |
-| `minAgeHours` | `24` | 超过多少小时没活动就归档 |
+| `minAgeHours` | `168` | 超过多少小时没活动就归档（168 = 1 周） |
 | `startupDelayMs` | `8000` | 启动后延迟多久扫描（给界面恢复上次会话留时间） |
 | `archiveBlank` | `true` | 空对话是否归档 |
 | `archiveUnverified` | `false` | 无投影缓存（无法确认最后活动时间）的会话是否也归档 |
@@ -54,7 +54,7 @@ DSH 插件：**每次启动时，把默认工作区里“超过设定时间没�
 ```json
 {
   "startedAt": "2026-11-08T00:40:00.000Z",
-  "thresholdHours": 24,
+  "thresholdHours": 168,
   "dryRun": false,
   "workspace": { "id": "1129b56f-...", "path": "D:\\Document\\deepseek-harness\\default-workspace", "title": "default-workspace" },
   "candidates": [{ "sessionId": "session-...", "activeAt": "...", "ageHours": 55.2, "blank": false }],
@@ -69,7 +69,7 @@ DSH 插件：**每次启动时，把默认工作区里“超过设定时间没�
 ## 验证
 
 1. 把 `dryRun: true` 写进 `cordis.patch.yml`，重启 DSH；
-2. 看报告里的 `candidates`，与侧边栏里超过一天没动的未置顶会话核对；
+2. 看报告里的 `candidates`，与侧边栏里超过一周没动的未置顶会话核对；
 3. 改回 `dryRun: false`，再重启，报告 `archived` 应等于上一轮 `candidates`，
    且 `workspace.json` 的 `archivedSessionIds` 增加这些 id、`pinnedSessionIds` 不变。
 

@@ -7,8 +7,8 @@
  *
  * “最后活动时间”用的是 `SessionSummary.updatedAt`，即 DSH 侧边栏排序所用的
  * `max(header.createdAt, 最后一条真实用户消息时间)`（见 dsh-api-session-controller
- * 的 `sessionListMetadata` 投影）。因此插件判断“超过一天”和用户在列表里看到的
- * 时间口径一致，不会把“创建很久但昨天还在聊”的会话误归档。
+ * 的 `sessionListMetadata` 投影）。因此插件判断“超过阈值（默认一周）”和用户在列表里看到的
+ * 时间口径一致，不会把“创建很久但最近还在聊”的会话误归档。
  *
  * 安全边界：
  *   - 置顶会话永不归档（置顶与归档本来就互斥，归档还会顺带丢置顶，这里直接跳过）；
@@ -34,7 +34,8 @@ export const name = 'dsh-auto-archive'
 export const inject = ['agents', 'sessionController', 'sessions', 'workspaceRegistry']
 
 const HOUR_MS = 60 * 60 * 1000
-const DEFAULT_MIN_AGE_HOURS = 24
+/** 默认阈值：1 周（168 小时）。 */
+const DEFAULT_MIN_AGE_HOURS = 168
 /** 等界面恢复上次会话再扫描；太早会误伤“用户正打算继续”的老对话。 */
 const DEFAULT_STARTUP_DELAY_MS = 8000
 /** 列会话的超时：本地 SQLite/缓存读取，正常几秒内完成。 */

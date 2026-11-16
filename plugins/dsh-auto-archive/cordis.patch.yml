@@ -4,8 +4,8 @@
     - id: auto-archive
       name: dsh-auto-archive
       config:
-        # 判定“超过多久没聊过”的阈值，单位小时；24 = 1 天
-        minAgeHours: 24
+        # 判定“超过多久没聊过”的阈值，单位小时；168 = 1 周
+        minAgeHours: 168
         # 启动后等多久再扫描，给界面恢复上次会话留时间；单位毫秒
         startupDelayMs: 8000
         # 空对话（创建后一轮都没聊过）是否也归档
