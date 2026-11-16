@@ -150,3 +150,92 @@
       config:
         preset: readonly
         permissionPreset: read-only-mode
+
+# 「智能体模式」Agent 预设：主智能体只有读、查、问、派活的工具，改文件和跑命令由
+# 子智能体（standard 预设）完成；首轮由 agent-mode-guard 自动打开 Agent Teams 任务板，
+# 并在每步注入「一条消息一个工单、派完结束本轮」的协调者规则。
+- insert:
+    - id: preset-agent-mode
+      name: '@deepseek-ai/dsh-agent-preset'
+      config:
+        id: agent-mode
+        name: 智能体模式
+        description: 主智能体只做需求分析、事实核对和任务确认；改文件、跑命令派给子智能体，可以边等边接新问题。
+        order: 5
+        plugins:
+          - id: persona
+            name: '@deepseek-ai/dsh-persona'
+            config:
+              prefix: >-
+                You are a coordination agent powered by the {{model}} model.
+                You analyse requirements, verify facts, and confirm work with the user.
+                Teammates implement changes; you never edit files or run commands yourself.
+          - id: agent-instructions
+            name: '@deepseek-ai/dsh-agent-instructions'
+            config:
+              maxBytes: 65536
+          - id: time-context
+            name: '@deepseek-ai/dsh-time-context'
+          - id: tool-fs
+            name: '@deepseek-ai/dsh-tool-fs'
+            config:
+              read: true
+              readImage: true
+              write: false
+              edit: false
+              applyPatch: false
+          - id: tool-fs-search
+            name: '@deepseek-ai/dsh-tool-fs-search'
+            config:
+              sampleOverCapGlobResults: false
+          - id: skill-filesystem
+            name: '@deepseek-ai/dsh-skill-filesystem'
+          - id: tool-skill
+            name: '@deepseek-ai/dsh-tool-skill'
+          - id: tool-web
+            name: '@deepseek-ai/dsh-tool-web'
+            config:
+              fetch: true
+              searchTimeoutMs: 60000
+          - id: tool-ask-user
+            name: '@deepseek-ai/dsh-tool-ask-user'
+          - id: tool-todo
+            name: '@deepseek-ai/dsh-tool-todo'
+            config:
+              allowParallelInProgress: true
+          - id: tool-subagent-control
+            name: '@deepseek-ai/dsh-tool-subagent-control'
+            config:
+              interrupt: false
+          - id: tool-subagent
+            name: '@deepseek-ai/dsh-tool-subagent'
+            config:
+              provider: spawn
+              toolName: subagent
+              modelSelection: true
+              modelDiscovery: true
+              # 子智能体固定用标准模式：主智能体没有写工具，子智能体必须有。
+              agentPreset: standard
+              # 只允许直接子智能体；子智能体不能再往下派。
+              maxDepth: 1
+          - id: compaction
+            name: cordis:group
+            group: true
+            isolate:
+              compaction: true
+              toolResultPruner: true
+            config:
+              - id: compaction-basic
+                name: '@deepseek-ai/dsh-compaction-basic'
+              - id: command-compact
+                name: '@deepseek-ai/dsh-command-compact'
+              - id: tool-result-pruner
+                name: '@deepseek-ai/dsh-compaction-tool-result-pruner'
+                config:
+                  thresholdChars: 8192
+                  headChars: 4096
+                  tailChars: 1024
+    - id: agent-mode-guard
+      name: dsh-purewhite-toolkit/agent-mode-guard
+      config:
+        preset: agent-mode

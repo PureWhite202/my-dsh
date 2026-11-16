@@ -81,6 +81,31 @@ bundle 里声明了一个 `readonly` Agent 预设（模式下拉里的「只读�
 
 改动后如果模式下拉里没有「只读模式」，在插件管理器里把 `dsh-purewhite-toolkit` 关一次再开（触发重新组合），或者重启 DSH。
 
+## 智能体模式（Agent 预设 + 执行守卫，2026-11-17 新增）
+
+bundle 里声明了一个 `agent-mode` Agent 预设（模式下拉里的「智能体模式」），外加执行守卫 `agent-mode-guard.js`。目标：主对话只负责听需求、核对事实、拆任务、派活，真正改文件和跑命令由子智能体做；用户可以想到一条发一条，主智能体在子智能体干活时继续接新问题。
+
+- 主智能体保留的工具：`read` / `read_image`、`glob` / `grep`、`web_search` / `web_fetch`、`skill`、`ask_user_question`、`todo_write`、`subagent`、`send_message` / `list_agents` / `wait_agent`，以及任务板 `team_task_*`（Team 打开后可见）；
+- 主智能体拿不到的能力：`write` / `edit` / `apply_patch`（`tool-fs` 里关掉），以及 bash / pwsh、jobs、terminal、schedule、plugin_manager、workflow、fork 子智能体——这些工具在预设里根本没有挂；
+- 子智能体固定用 `standard` 预设（`agentPreset: standard`，`maxDepth: 1`）：能写文件、跑命令、跑测试，但不能再往下派；
+- 守卫在**首轮**的 `agent/pre-step` 里写一次 `team/mode { enabled: true }`，把 Agent Teams 任务板自动打开；之后用户手动关掉不会被抢回来；
+- 守卫每步注入一段协调者规则（`agent-mode:coordinator`）：一条用户消息一个工单、先回执再派活、派完结束本轮不空等、补充信息用 `send_message` 发给正在做的人、同一文件不并发派两单、完成后先验收再汇报；
+- **兜底拦截**：`tools.guard` 会在智能体模式的会话里拒绝 `write` / `edit` / `apply_patch` / `bash` / `pwsh` 等工具调用，防止以后装的宿主级工具（例如 MCP 文件工具）绕过预设清单；
+- 会话开始后不能切换预设，要用就新开对话；子智能体完成时会给主智能体发通知，主智能体空闲就自动开一轮汇报，不需要用户催。
+
+配置（`cordis.patch.yml` 里 `agent-mode-guard` 行的 `config`）：
+
+| 键 | 默认 | 说明 |
+|---|---|---|
+| `preset` | `agent-mode` | 要生效的 Agent 预设 id |
+| `teamMode` | `true` | 首轮自动打开 Agent Teams 任务板 |
+| `guardWriteTools` | `true` | 是否启用写类工具的兜底拦截 |
+| `denyTools` | 内置名单 | 覆盖兜底拦截的工具名列表 |
+
+内置名单：`write`、`edit`、`apply_patch`、`str_replace_editor`、`bash`、`pwsh`、`terminal_open`、`terminal_send`、`job_output`。
+
+改动后如果模式下拉里没有「智能体模式」，把 `dsh-purewhite-toolkit` 关一次再开，或者重启 DSH。
+
 ## 配置
 
 `cordis.patch.yml` 里 `config`，全部可省略：
@@ -102,7 +127,8 @@ bundle 里声明了一个 `readonly` Agent 预设（模式下拉里的「只读�
 ```bash
 node scripts/build-helper.mjs      # Windows：编译 build/dshtool-capture.exe（csc，约 0.2 秒）
 node test/smoke.mjs                # 冒烟测试：纯函数单测 + 真截一张屏 + 区域 + 窗口错误路径
-node test/readonly-guard.test.mjs  # 只读守卫单测：钉住/幂等/非首轮/提示词/申请工具（12 个场景）
+node test/readonly-guard.test.mjs  # 只读守卫单测：钉住/幂等/非首轮/提示词/申请工具（13 个场景）
+node test/agent-mode-guard.test.mjs # 智能体模式守卫单测：任务板首轮开启/幂等/子代理/提示词/工具拦截（11 个场景）
 ```
 
 macOS 不需要构建步骤（系统自带 `screencapture` / `sips` / `osascript`），直接 `node test/smoke.mjs`。
