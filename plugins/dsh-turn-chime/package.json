@@ -1,9 +1,9 @@
 {
   "name": "dsh-turn-chime",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
-  "description": "DSH 插件：每轮对话结束（turn/end）时播放提示音，默认跳过子代理与取消的轮次",
+  "description": "DSH 插件：只在主页主对话的真人轮次结束或提问时播放提示音，跳过子代理与自动轮次",
   "main": "index.js",
   "exports": {
     ".": "./index.js",

@@ -4,8 +4,12 @@
     - id: turn-chime
       name: dsh-turn-chime
       config:
-        # 启动后先响一次，用来确认加载的确实是这个音效；嫌吵就改成 false
-        announce: true
+        # 启动后先响一次，用来确认加载的确实是这个音效；默认关，避免与「只在主对话响」冲突
+        announce: false
+        # 只对主页里有过真人消息的根会话响；子代理和纯自动会话（定时任务、模型自测等）不响
+        mainConversationOnly: true
+        # 会话里至少有一条带 rpcId（Web UI 提交）的真人消息
+        requireClientPrompt: true
       #   sound: 1               # 结束音：内置 1（下行）/ 2（上行），或任意音频路径（wav/mp3/m4a…）
       #   errorSound: 2          # 失败轮次单独用另一个；不填就跟 sound 一样
       #   askSound: 2            # 模型问你（ask_user_question / exit_plan_mode）时响这个；false 关闭提问音

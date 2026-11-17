@@ -2,6 +2,15 @@
 
 插件干什么、什么时候响，见 [README.md](README.md)。
 
+## 触发范围
+
+默认只响两类声音：
+
+- 主页里有过真人消息的根会话（不要求是最近一个会话）的一轮结束（`turn/end`）；
+- 模型在这种会话里调用 `ask_user_question` / `exit_plan_mode`。
+
+子代理会话、纯模型自测、定时任务、后台作业等没有主页真人消息的会话不响；长任务被后台通知续跑后结束，也按这个会话算。启动 announce 默认也关。
+
 ## 安装
 
 profile 目录 `~/.dsh/profiles/desktop`，两处改动：
@@ -36,10 +45,12 @@ profile 目录 `~/.dsh/profiles/desktop`，两处改动：
 | `errorSound` | `null` | `error` 时改播这个；不填就用 `sound` |
 | `askSound` | `2` | 提问音：内置名、路径；`false` 关闭提问音 |
 | `askTools` | `['ask_user_question','exit_plan_mode']` | 哪些工具调用算「在问你」 |
+| `mainConversationOnly` | `true` | 只对主页里有过真人消息的根会话响；子代理和纯自动会话不响；关掉后回到旧行为（非子代理会话都响） |
+| `requireClientPrompt` | `true` | 会话里至少有一条用户消息带 `rpcId`（Web UI 提交）才算真人会话；关掉后任意 `source.kind === 'user'` 都算 |
 | `volume` | `85` | 播放音量 0–100，只对非 wav 生效（wav 跟随系统音量） |
-| `announce` | `true`（本机配置） | 插件加载后先响一次，用来确认音效；嫌吵改成 `false` |
+| `announce` | `false`（本机配置） | 插件加载后先响一次，用来确认音效；默认关，避免与「只在主对话响」冲突 |
 | `reasons` | `['completed','error','blocked','max-tokens','interrupted']` | 哪些收尾原因响结束音 |
-| `skipSubagents` | `true` | 子代理会话不响 |
+| `skipSubagents` | `true` | 子代理会话不响；`mainConversationOnly` 开启时也会自动跳过 |
 | `debounceMs` | `800` | 去抖窗口，毫秒；结束音和提问音各自计时 |
 | `debug` | `false` | 每次响之前往宿主日志写一行，带触发原因和音效路径 |
 | `command` | `null` | 自定义播放命令；填了就不再走内置播放器 |

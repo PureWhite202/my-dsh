@@ -1,16 +1,16 @@
 /**
- * dsh-turn-chime — 每轮对话结束时响一声，模型反过来问用户时另响一声。
+ * dsh-turn-chime — 主页里有人类对话的会话结束时响一声，模型反问用户时另响一声。
  *
- * 宿主侧插件：订阅 DSH 的 `session/event`。处理两类事件：
- *   - `turn/end`（每轮 agent 停止工作）：播结束音；
- *   - `tool/call` 里的询问工具（默认 `ask_user_question` / `exit_plan_mode`）：
- *     播提问音，和结束音分开。
+ * 宿主侧插件：订阅 DSH 的 `session/event`。处理这些事件：
+ *   - `user/message`：记录这个会话出现过主页客户端提交的真人消息；
+ *   - `tool/call` 里的询问工具：播提问音；
+ *   - `turn/end`：这个会话的一轮结束时播结束音。
  *
- * 默认行为：
- *   - 结束音 `assets/1.wav`（G6→E6→C6→G5 下行琶音），提问音 `assets/2.wav`
- *     （G5→C6→E6→G6 上行琶音），都是插件自带的合成音，完全不碰系统提示音；
- *   - 子代理会话（`session.header.origin === 'subagent'`）不响，避免一个任务
- *     结束时空闲的子代理轮次把提示音刷成连绵不断；
+ * 默认只对「主页主对话」响：
+ *   - 子代理会话（`origin === 'subagent'` 或 `delegationDepth > 0`）不响；
+ *   - 会话里必须出现过客户端提交的真人消息（`source.kind === 'user'` 且带 `rpcId`）；
+ *     纯模型自测、定时任务、后台作业等没有真人消息的会话不响；
+ *   - 不要求结束的这一轮正好由真人消息开头；长任务被后台通知续跑后结束也会响；
  *   - 用户自己取消（`aborted`）和 fork（`forked`）不响；
  *   - 结束音和提问音各自去抖：同一类 800ms 内只响一次，两类互不吞音。
  *
@@ -59,6 +59,9 @@ export function apply(ctx, config = {}) {
   const options = resolveConfig(config ?? {})
   if (!options.enabled) return
 
+  /** 会话 id → 该会话是否出现过主页客户端的真人消息。 */
+  const conversations = new Map()
+
   let lastTurnChimeAt = 0
   let lastAskChimeAt = 0
 
@@ -70,14 +73,42 @@ export function apply(ctx, config = {}) {
     timer.unref?.()
   }
 
+  /**
+   * 会话是否出现过主页客户端的真人消息。
+   * 没在内存里记过时回看一次历史，插件重载后也能识别正在进行的对话。
+   * @param session 当前会话。
+   * @returns 有过真人消息返回 true。
+   */
+  const isHumanConversation = (session) => {
+    const id = session?.id
+    if (typeof id !== 'string') return false
+    const known = conversations.get(id)
+    if (known !== undefined) return known
+    const found = scanForClientPrompt(session, options)
+    conversations.set(id, found)
+    return found
+  }
+
   ctx.on('session/event', (session, event) => {
     try {
       if (event === null || typeof event !== 'object') return
 
+      // 子代理和（主对话模式下的）非根会话都不响。
+      if (options.skipSubagents && isSubagentSession(session)) return
+      if (options.mainConversationOnly && !isRootSession(session)) return
+
+      // 只要这个会话里出现过主页客户端的真人消息，就把它算作主对话。
+      if (event.type === 'user/message') {
+        if (isClientPrompt(event.data, options) && typeof session?.id === 'string') {
+          conversations.set(session.id, true)
+        }
+        return
+      }
+
       // 提问音：模型调用询问用户的工具，和结束音分开。
       if (event.type === 'tool/call') {
         if (options.askSound === null) return
-        if (options.skipSubagents && session?.header?.origin === 'subagent') return
+        if (options.mainConversationOnly && !isHumanConversation(session)) return
 
         const tool = event.data?.name
         if (typeof tool !== 'string' || !options.askTools.has(tool)) return
@@ -91,9 +122,7 @@ export function apply(ctx, config = {}) {
       }
 
       if (event.type !== 'turn/end') return
-
-      // 子代理轮次不响：它们由我（或工具）发起，不是用户等的那一件事。
-      if (options.skipSubagents && session?.header?.origin === 'subagent') return
+      if (options.mainConversationOnly && !isHumanConversation(session)) return
 
       const kind = event.data?.reason?.kind ?? 'completed'
       if (!options.reasons.has(kind)) return
@@ -109,6 +138,65 @@ export function apply(ctx, config = {}) {
       ctx.logger?.warn?.(`dsh-turn-chime: chime failed: ${error?.message ?? error}`)
     }
   })
+}
+
+/**
+ * 一条用户消息是不是主页客户端提交的真人消息。
+ * @param message `user/message` 的 data。
+ * @param options 归一化后的配置。
+ * @returns 真人消息返回 true；注入的运行时上下文、子代理通知、目标推进等返回 false。
+ */
+function isClientPrompt(message, options) {
+  const source = message?.source
+  if (source === null || typeof source !== 'object' || source.kind !== 'user') return false
+  if (!options.requireClientPrompt) return true
+  // Web UI 提交的用户消息带 rpcId；模型/插件注入的消息没有。
+  return typeof source.rpcId === 'string' && source.rpcId.trim() !== ''
+}
+
+/**
+ * 回看会话历史，找有没有主页客户端的真人消息。
+ * 插件重载后内存状态会丢，用它识别正在进行的对话。
+ * @param session 当前会话。
+ * @param options 归一化后的配置。
+ * @returns 找到真人消息返回 true。
+ */
+function scanForClientPrompt(session, options) {
+  if (typeof session?.snapshotEvents !== 'function') return false
+  let events
+  try {
+    events = session.snapshotEvents()
+  } catch {
+    return false
+  }
+  if (!Array.isArray(events)) return false
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index]
+    if (event?.type === 'user/message' && isClientPrompt(event.data, options)) return true
+  }
+  return false
+}
+
+/**
+ * 是否是子代理会话。
+ * @param session 当前会话。
+ * @returns 子代理（含嵌套子代理）返回 true；无法读取 header 时按子代理处理。
+ */
+function isSubagentSession(session) {
+  const header = session?.header
+  if (header === null || typeof header !== 'object') return true
+  if (header.origin === 'subagent') return true
+  return typeof header.delegationDepth === 'number' && header.delegationDepth > 0
+}
+
+/**
+ * 是否是主页根会话（非子代理）。
+ * @param session 当前会话。
+ * @returns 根会话返回 true。
+ */
+function isRootSession(session) {
+  const header = session?.header
+  return header !== null && typeof header === 'object' && !isSubagentSession(session)
 }
 
 /**
@@ -149,6 +237,8 @@ function resolveConfig(config) {
     ),
     reasons: new Set(Array.isArray(config.reasons) ? config.reasons : DEFAULT_REASONS),
     skipSubagents: config.skipSubagents !== false,
+    mainConversationOnly: config.mainConversationOnly !== false,
+    requireClientPrompt: config.requireClientPrompt !== false,
     debounceMs: Number.isFinite(config.debounceMs) ? Math.max(0, config.debounceMs) : 800,
     volume: Number.isFinite(config.volume) ? Math.min(100, Math.max(0, config.volume)) : 85,
     announce: config.announce === true,
