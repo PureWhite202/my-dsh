@@ -153,7 +153,8 @@
 
 # 「智能体模式」Agent 预设：主智能体只有读、查、问、派活的工具，改文件和跑命令由
 # 子智能体（standard 预设）完成；首轮由 agent-mode-guard 自动打开 Agent Teams 任务板，
-# 并在每步注入「一条消息一个工单、派完结束本轮」的协调者规则。
+# 并在每步注入「一条消息一个工单、派完结束本轮、完成即汇报（时间接近合并，需多个
+# 子智能齐活才等）」的协调者规则。
 - insert:
     - id: preset-agent-mode
       name: '@deepseek-ai/dsh-agent-preset'

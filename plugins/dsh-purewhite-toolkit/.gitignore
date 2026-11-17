@@ -1,3 +1,4 @@
 build/
 test/.out/
+test/.tmp-skills/
 node_modules/

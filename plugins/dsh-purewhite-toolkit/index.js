@@ -18,7 +18,7 @@
 
 import { spawn, spawnSync } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
-import { isAbsolute, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 /** Cordis 插件名，与 cordis.patch.yml 里的 name 一致。 */
@@ -203,7 +203,7 @@ export function apply(ctx, config = {}) {
 
 /**
  * 把插件自带的技能（skills/<名字>/SKILL.md）注册进宿主技能表。
- * 技能服务不存在或解析失败时静默跳过，绝不影响 screenshot 工具。
+ * 技能服务不存在或单个技能解析失败时跳过该技能，绝不影响 screenshot 工具。
  * @param ctx Cordis 上下文。
  */
 function registerBundledSkills(ctx) {
@@ -223,13 +223,18 @@ function registerBundledSkills(ctx) {
       } catch {
         return
       }
+      const pluginRoot = dirname(SKILLS_DIR)
       for (const entry of entries) {
         if (!entry.isDirectory()) continue
         const filePath = join(SKILLS_DIR, entry.name, 'SKILL.md')
         let skill
         try {
           skill = readBundledSkill(filePath)
-        } catch {
+        } catch (error) {
+          warnSafely(
+            skillsCtx,
+            `dsh-purewhite-toolkit: 技能 ${entry.name} 解析失败，已跳过：${error instanceof Error ? error.message : String(error)}`,
+          )
           continue
         }
         if (skill === undefined) continue
@@ -237,8 +242,15 @@ function registerBundledSkills(ctx) {
           // DSH 的 skills.register 要求 source 是非空字符串，缺了会抛
           // 「loaded skill "x" source must be a string」并把整轮启动标记为失败。
           // 插件自带的技能属于 bundled（宿主据此视为受保护、不可在 UI 里禁用）。
+          // resourceBase 指到插件根目录：模型加载技能时能看到
+          // 「Base directory for this skill: <插件根>」，写文件不用猜路径。
           const register = () =>
-            skills.register({ ...skill, source: 'bundled', path: filePath })
+            skills.register({
+              ...skill,
+              source: 'bundled',
+              path: filePath,
+              resourceBase: { kind: 'directory', path: pluginRoot },
+            })
           if (typeof skillsCtx.effect === 'function') {
             skillsCtx.effect(register, `dsh-purewhite-toolkit: skill ${skill.name}`)
           } else {
@@ -255,11 +267,18 @@ function registerBundledSkills(ctx) {
 }
 
 /**
- * 读插件自带的 SKILL.md：frontmatter 只取 name / description，正文原样。
+ * 读插件自带的 SKILL.md：frontmatter 取 name / description 与调用策略，正文原样。
+ *
+ * 调用策略与 DSH `skill-filesystem` 对齐：
+ *   disable-model-invocation: true → modelInvocable: false（不进模型目录，skill 工具也加载不到）
+ *   user-invocable: false          → userInvocable: false（连 `/名字` 手势也不注入）
+ * 两个键都省略时保持宿主默认：模型与用户都能调用。
+ * 布尔写错或用了旧的驼峰键时抛错，由调用方跳过该技能并告警，避免静默放开模型调用。
+ *
  * @param filePath SKILL.md 绝对路径。
- * @returns {{name: string, description: string, content: string}|undefined}
+ * @returns {{name: string, description: string, invocation: {modelInvocable: boolean, userInvocable: boolean}, content: string}|undefined}
  */
-function readBundledSkill(filePath) {
+export function readBundledSkill(filePath) {
   const raw = readFileSync(filePath, 'utf8')
   const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/u.exec(raw)
   const frontmatter = match === null ? '' : match[1]
@@ -271,7 +290,45 @@ function readBundledSkill(filePath) {
   const name = unquote(nameMatch[1])
   const description = unquote(descriptionMatch[1])
   if (name === '' || description === '' || content === '') return undefined
-  return { name, description, content }
+  return {
+    name,
+    description,
+    invocation: {
+      modelInvocable: frontmatterBoolean(frontmatter, 'disable-model-invocation') !== true,
+      userInvocable: frontmatterBoolean(frontmatter, 'user-invocable') !== false,
+    },
+    content,
+  }
+}
+
+/** 旧驼峰键在 DSH 里已被拒绝；这里同样拒绝，免得静默忽略后放开模型调用。 */
+const LEGACY_INVOCATION_KEYS = {
+  'disable-model-invocation': ['disableModelInvocation', 'modelInvocable'],
+  'user-invocable': ['userInvocable'],
+}
+
+/**
+ * 解析 frontmatter 里的布尔键；键不存在返回 undefined，写法不认识就抛错。
+ * 支持与 DSH skill-filesystem 相同的写法：true/false、yes/no、on/off、1/0，
+ * 可加引号，行尾可跟 ` # 注释`。
+ * @param frontmatter frontmatter 原文。
+ * @param key 规范键名（kebab-case）。
+ * @returns {boolean|undefined}
+ */
+function frontmatterBoolean(frontmatter, key) {
+  for (const legacy of LEGACY_INVOCATION_KEYS[key] ?? []) {
+    if (new RegExp(`^${legacy}\\s*:`, 'mu').test(frontmatter)) {
+      throw new TypeError(`frontmatter 字段 ${legacy} 不受支持，请写 ${key}`)
+    }
+  }
+  const match = new RegExp(`^${key}:[ \\t]*(.*?)[ \\t]*$`, 'mu').exec(frontmatter)
+  if (match === null) return undefined
+  let value = match[1].trim()
+  if (!/^["']/u.test(value)) value = value.replace(/[ \t]+#.*$/u, '').trim()
+  value = value.replace(/^(["'])([\s\S]*)\1$/u, '$2').trim().toLowerCase()
+  if (value === 'true' || value === 'yes' || value === 'on' || value === '1') return true
+  if (value === 'false' || value === 'no' || value === 'off' || value === '0') return false
+  throw new TypeError(`frontmatter 字段 ${key} 必须是布尔值，收到「${match[1]}」`)
 }
 
 /** 宿主有 logger 就记一条警告，没有/不许访问就静默。 */
@@ -1092,12 +1149,26 @@ function readSessionCwd(exec) {
 function isReadOnlySession(ctx, exec) {
   const session = exec?.agent?.session
   if (session === undefined || session === null) return false
-  const policy = ctx?.sandboxPolicy
+  const policy = readService(ctx, 'sandboxPolicy')
   if (policy === undefined || policy === null || typeof policy.resolve !== 'function') return false
   try {
     return policy.resolve({ session }).mode === 'read-only'
   } catch {
     return false
+  }
+}
+
+/**
+ * 读取一个宿主服务；服务没有声明在 inject 里时 Cordis 会抛错，这里统一降级为 undefined。
+ * @param ctx Cordis 上下文。
+ * @param name 服务名。
+ * @returns 服务实例或 undefined。
+ */
+function readService(ctx, name) {
+  try {
+    return typeof ctx?.get === 'function' ? ctx.get(name) : undefined
+  } catch {
+    return undefined
   }
 }
 

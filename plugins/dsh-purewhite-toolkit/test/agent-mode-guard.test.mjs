@@ -3,7 +3,8 @@
  *  1. 智能体模式 + 首轮 → 追加 team/mode { enabled: true }；
  *  2. 非智能体模式、非首轮、任务板已开、子代理会话 → 不追加；
  *  3. agentTeams 服务缺失 → 不追加且不抛错；
- *  4. 运行时上下文只在智能体模式会话里返回协调者规则；
+ *  4. 运行时上下文只在智能体模式会话里返回协调者规则（含「完成即汇报、时间接近合并、
+ *     必须多个子智能齐活才等」的汇报时机规则）；
  *  5. 工具守卫拒绝写类工具、放行只读工具、不误伤其它预设。
  */
 
@@ -163,7 +164,11 @@ tests.push({
     const text = contribution.text({ agent: { session: {} } })
     assert.ok(text.includes('Agent Mode'), 'notice must name Agent Mode')
     assert.ok(text.includes('work item'), 'notice must describe the work-item rule')
-    assert.ok(text.includes('end your turn'), 'notice must forbid waiting')
+    assert.ok(text.includes('end your turn'), 'notice must forbid waiting in the dispatch turn')
+    assert.ok(text.includes('the moment it is done'), 'notice must report each item as soon as it lands')
+    assert.ok(text.includes('close together'), 'notice must merge reports of near-simultaneous finishes')
+    assert.ok(text.includes('wait_agent'), 'notice must allow waiting only when several teammates are needed')
+    assert.ok(text.includes('report once'), 'notice must ask for a single combined report in that case')
     assert.equal(contribution.text({}), '', 'no agent context yields no text')
 
     state.preset = 'standard'

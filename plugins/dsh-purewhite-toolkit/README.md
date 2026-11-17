@@ -46,14 +46,33 @@
 | `CAPTURE_TIMEOUT` | 截图进程超时（20 秒） |
 | `CAPTURE_SPAWN_FAILED` / `CAPTURE_FAILED` / `CONVERT_FAILED` | 子进程起不来 / 截图失败 / 转码失败 |
 
-## 技能：sync-config（2026-11-10 新增）
+## 技能：sync-config / blackboard / create-in-purewhite（2026-11-10、2026-11-18 新增）
 
-插件自带一个技能，随插件加载注册进宿主技能表（`ctx.skills.register`），不需要软链到 `~/.agents/skills`。
+插件自带的技能随插件加载注册进宿主技能表（`ctx.skills.register`），不需要软链到 `~/.agents/skills`。
+`skills/` 下每个子目录是一个技能，加技能只需加目录，`index.js` 会自动扫描。
+
+### sync-config
 
 - 文件：`skills/sync-config/SKILL.md`
 - 触发：输入 `/sync-config`（技能和命令共用 `/` 菜单），或说「对比本机和云端」「同步个人配置」
 - 内容：全自然语言。仓库与 SSH 连接信息、本机/云端各指什么、对比步骤、报告格式、只读与确认规矩、拉取/推送命令，都写在正文里
-- 关掉：配置项 `skills: false`
+
+### blackboard（2026-11-18 新增）
+
+- 文件：`skills/blackboard/SKILL.md`，配套脚本在 `skills/blackboard/scripts/`（`bb.py`、`open-blackboard.cmd`）
+- 触发：只在用户输入 `/blackboard`，或明确点名南安普顿 Blackboard Ultra 站点、要求读取 / 下载 / 核对课程资料时使用；普通笔记、复习、写报告这类不点名网站的任务不加载
+- 内容：课程 URL 与 courseId 对照、SSO 登录规矩（密码与验证码只由用户在浏览器窗口输入，遇到登录跳转或验证码就停手告知）、持久化 Chromium profile + CDP 9222 的取数流程、下载与 Panopto 配方、`D:\Document\马来南安学习` 目录约定与证据规范
+- 依赖：本机 Playwright 自带 Chromium、`~/.dsh/browser-profiles/blackboard`、`websocket-client`（`close` 用）；换机后第一次要用户自己走一次 SSO
+- 关掉：配置项 `skills: false`（同时关掉所有内置技能）
+
+### create-in-purewhite（2026-11-18 新增）
+
+- 文件：`skills/create-in-purewhite/SKILL.md`
+- 触发：只在用户输入 `/create-in-purewhite` 时注入（`/` 后面要跟空格或行尾）。frontmatter 的 `disable-model-invocation: true` 让它不进模型技能目录，`skill` 工具也加载不到；`user-invocable` 缺省为 true，保留手势入口。
+- 内容：注入一条收口规则——本轮对话里要求新建或改写的功能、技能、工具、提示词、Agent 预设，一律作为本插件的一部分实现并随插件打包；另附各类能力的落点表、手动触发技能的写法、验证命令和验收清单。
+- 实现：`index.js` 的 `readBundledSkill()` 解析 `disable-model-invocation` / `user-invocable`，映射成 DSH `skills.register` 的 `invocation`；内置技能同时带 `resourceBase`（插件根目录），模型加载时能看到 `Base directory for this skill: <插件根>`。
+- 测试：`node test/skills.test.mjs`（6 个场景：手动触发、默认策略、布尔写法、坏写法抛错、注册透传、`skills: false`）。
+- 关掉：配置项 `skills: false`（同时关掉所有内置技能）。
 
 ## 提示词注入：证据优先 / 写作规范（2026-11-17 新增）
 
@@ -118,6 +137,7 @@ bundle 里声明了一个 `agent-mode` Agent 预设（模式下拉里的「智�
 - 子智能体固定用 `standard` 预设（`agentPreset: standard`，`maxDepth: 1`）：能写文件、跑命令、跑测试，但不能再往下派；
 - 守卫在**首轮**的 `agent/pre-step` 里写一次 `team/mode { enabled: true }`，把 Agent Teams 任务板自动打开；之后用户手动关掉不会被抢回来；
 - 守卫每步注入一段协调者规则（`agent-mode:coordinator`）：一条用户消息一个工单、先回执再派活、派完结束本轮不空等、补充信息用 `send_message` 发给正在做的人、同一文件不并发派两单、完成后先验收再汇报；
+- 汇报时机也写在同一段规则里：**一项完成就汇报**（说清改了什么、哪些文件、怎么验证的），不等整个计划做完；两项完成时间接近就合并成一条，不发两条几乎一样的消息；唯一的例外是「一个工作点拆给了多个子智能、必须都齐才能验证」——这时用 `wait_agent` 等齐、一起验证、只汇报一次；其它情况子智能做完一个点就汇报，让剩下的各自落在自己的汇报里；
 - **兜底拦截**：`tools.guard` 会在智能体模式的会话里拒绝 `write` / `edit` / `apply_patch` / `bash` / `pwsh` 等工具调用，防止以后装的宿主级工具（例如 MCP 文件工具）绕过预设清单；
 - 会话开始后不能切换预设，要用就新开对话；子智能体完成时会给主智能体发通知，主智能体空闲就自动开一轮汇报，不需要用户催。
 
@@ -157,6 +177,8 @@ node scripts/build-helper.mjs      # Windows：编译 build/dshtool-capture.exe�
 node test/smoke.mjs                # 冒烟测试：纯函数单测 + 真截一张屏 + 区域 + 窗口错误路径
 node test/readonly-guard.test.mjs  # 只读守卫单测：钉住/幂等/非首轮/提示词/申请工具（13 个场景）
 node test/agent-mode-guard.test.mjs # 智能体模式守卫单测：任务板首轮开启/幂等/子代理/提示词/工具拦截（11 个场景）
+node test/skills-register.test.mjs  # 技能注册：skills/ 自动发现、source=bundled、每个技能都能解析
+node test/skills.test.mjs           # 技能调用策略：手动触发、默认值、布尔写法、注册透传（6 个场景）
 ```
 
 macOS 不需要构建步骤（系统自带 `screencapture` / `sips` / `osascript`），直接 `node test/smoke.mjs`。
@@ -218,3 +240,21 @@ profile 里按普通 bundle 安装（`link:` 指向本目录），宿主会读 `
 - `node test/smoke.mjs` 全部通过：整屏 1176x764（scale=0.4）、区域 200x120（200x120 点 × 2 倍 ÷ 2）、相对目录、窗口不存在、`save=false`、BMP 统计单测、窗口匹配优先级单测、错误归类单测。
 - 手动验证：`target=window, window="DeepSeek Harness"` 命中宿主窗口（CGWindowID 181，1280x820 点）；`hwnd=181` 同样命中；`target=screen, monitor=1` 可用；`format=jpeg` 正常（sips 质量 88）；越界 region 返回 `RegionOutsideScreen`。
 - 宿主热加载后 `screenshot` 工具可直接调用（截图内容块正常返回）。
+
+## 验证记录（2026-11-18，插件自带技能：blackboard）
+
+- `node test/skills-register.test.mjs`：假 ctx 走 `apply()`，`skills.register` 收到 `blackboard` 与 `sync-config`，`source=bundled`，路径都指向 `skills/<名字>/SKILL.md`——新增 `skills/blackboard` 目录不用改 `index.js` 就会被发现。
+- 从 `skills/blackboard/scripts/bb.py` 实跑（持久化 profile + CDP 9222）：启动后端口监听；`status` 返回 `logged_in`（页面标题 `Courses`）；`goto` 打开 COMP1312 `outline` 与 `announcements` 均返回正文，公告 3 条、最新 `10/11/2026`；`close` 后 9222 释放。
+- Playwright 截图在 Ultra 首页偶发 30 秒字体等待超时，已给 `bb.py --shot` 加 CDP `Page.captureScreenshot` 回退，复测 3.7 秒出图（119,864 字节）。
+- 注册发生在插件加载时：当前宿主进程还没重载，把 `dsh-purewhite-toolkit` 关一次再开（或重启 DSH）之后，`/blackboard` 才会出现在技能与命令菜单里。
+
+## 验证记录（2026-11-18，插件自带技能：create-in-purewhite）
+
+- `node --check index.js`、`node --check test/skills.test.mjs`：通过。
+- `node test/skills.test.mjs`：6/6 passed——create-in-purewhite 解析为 `modelInvocable=false`、`userInvocable=true`；sync-config 保持默认双开；布尔写法 `yes/no`、引号、行尾注释、`1/0` 都能识别；非法值与旧驼峰键抛错；`apply` 把 `invocation` 与 `resourceBase=<插件根>` 传给 `skills.register`；`skills: false` 不注册任何技能。
+- `node test/skills-register.test.mjs`：`skills.register` 收到 `blackboard`、`create-in-purewhite`、`sync-config`，`source=bundled`，路径都在 `skills/<名字>/SKILL.md`。
+- `node test/policies.test.mjs` 11/11、`node test/readonly-guard.test.mjs` 13/13、`node test/agent-mode-guard.test.mjs` 11/11、`node test/smoke.mjs` 全部通过。
+- `npm test`：构建 helper（已最新）+ 注册 + 6 个技能用例 + 冒烟全部通过。
+- `npm pack --dry-run`：28 个文件，包含 `skills/create-in-purewhite/SKILL.md`，新技能随包发布。
+- 基线对照：在普通项目里不调用本技能、直接要 `weekly-plan` 技能时，子代理把文件写进了该项目 `.dsh/skills/`；带 `/create-in-purewhite` 注入后，子代理把同类技能写进了工具集 `skills/`，普通项目目录保持不变。
+- 未验证：当前宿主进程尚未重载插件，`/create-in-purewhite` 还没出现在 `/` 菜单与真实注入流程里。需要在插件管理器里把 `dsh-purewhite-toolkit` 关一次再开（或重启 DSH）后，在新会话里确认：模型技能目录不出现该技能、输入 `/create-in-purewhite` 能注入、`skill` 工具加载它报 `not available for model invocation`。

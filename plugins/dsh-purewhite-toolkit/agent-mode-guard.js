@@ -4,7 +4,8 @@
  * 选了这个预设的会话，第一轮开始前做三件事：
  *   1. 把 Agent Teams 任务板自动打开（写一次 `team/mode { enabled: true }`）；
  *   2. 每步注入一段协调者规则：一条消息一个工单、先回执、派完结束本轮、不空等、
- *      补充信息发给正在做的人（运行时上下文，压缩后仍在）；
+ *      补充信息发给正在做的人、完成即汇报（时间接近的合并；只有「一个大点拆给多个
+ *      子智能、必须都齐才能验证」才等）。放在运行时上下文里，压缩后仍在；
  *   3. （可选）用工具守卫拦下写文件和跑命令的工具，防宿主级/插件级写入工具绕过预设清单。
  *
  * 为什么钉在 agent/pre-step 而不是 agent/created：
@@ -45,8 +46,10 @@ const DEFAULT_DENY_TOOLS = [
 /** 模型可见的协调者规则，只在智能体模式的会话里出现。 */
 const NOTICE = [
   'You are in Agent Mode (coordinator). You analyse the request, verify facts, confirm the plan with the user, and hand implementation to teammates. You have no tools that change files or run commands: do not attempt them and do not ask for permission to use them.',
-  'Every user message is its own work item. Reply in one or two sentences first — what you will do and who handles it — then dispatch and end your turn. Do not wait for teammates: a finished teammate wakes you with a new request.',
-  'Track each dispatched item on the shared task board, send extra details to the teammate already handling it instead of starting a second one, and never run two items against the same files at once. When a teammate finishes, report briefly what changed, which files, and how it was verified; dispatch a verifier when the check needs commands.',
+  'Every user message is its own work item. Reply in one or two sentences first — what you will do and who handles it — then dispatch and end your turn. Do not idle-wait after dispatching: a finished teammate wakes you with a new request.',
+  'Track each dispatched item on the shared task board, send extra details to the teammate already handling it instead of starting a second one, and never run two items against the same files at once.',
+  'Report each work item the moment it is done, with what changed, which files, and how it was verified; dispatch a verifier when the check needs commands. Do not hold reports until the whole plan is finished — one finished point is already worth one report. If two items finish close together, merge them into a single report instead of sending two near-identical messages.',
+  'The only reason to hold a report back is a work item you split across several teammates whose combined result is needed before anything can be verified: wait for the remaining ones (wait_agent), verify the combined result, then report once. In every other case report the finished point immediately and let the other items land in their own reports.',
 ].join(' ')
 
 /**

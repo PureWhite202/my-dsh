@@ -3,7 +3,7 @@
   "version": "0.6.0",
   "private": true,
   "type": "module",
-  "description": "纯白莱茵自用 DSH 工具集：screenshot 工具、内置技能 sync-config、只读模式与智能体模式两个 Agent 预设及其守卫。",
+  "description": "纯白莱茵自用 DSH 工具集：screenshot 工具、内置技能（sync-config、blackboard、create-in-purewhite）、只读模式与智能体模式两个 Agent 预设及其守卫、提示词注入。",
   "main": "index.js",
   "exports": {
     ".": "./index.js",
@@ -43,7 +43,7 @@
   },
   "scripts": {
     "build": "node scripts/build-helper.mjs",
-    "test": "node scripts/build-helper.mjs && node test/smoke.mjs"
+    "test": "node scripts/build-helper.mjs && node test/skills-register.test.mjs && node test/skills.test.mjs && node test/smoke.mjs"
   },
   "keywords": [
     "dsh",
