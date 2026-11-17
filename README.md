@@ -24,8 +24,12 @@
 | 目录 | 做什么 | 触发 |
 | --- | --- | --- |
 | [plugins/dsh-purewhite-toolkit/skills/sync-config](plugins/dsh-purewhite-toolkit/skills/sync-config/SKILL.md) | 对比本机实装环境与云端仓库的插件、技能、全局指令差异；拉取/推送方式写在正文里 | `/sync-config`，或说「对比本机和云端」「同步个人配置」 |
+| [plugins/dsh-purewhite-toolkit/skills/blackboard](plugins/dsh-purewhite-toolkit/skills/blackboard/SKILL.md) | 南安普顿 Blackboard Ultra 课程资料：SSO 登录、公告与大纲取数、文件下载与 Panopto 配方 | `/blackboard`，或明确点名该站点要读 / 下载 / 核对课程资料 |
+| [plugins/dsh-purewhite-toolkit/skills/create-in-purewhite](plugins/dsh-purewhite-toolkit/skills/create-in-purewhite/SKILL.md) | 收口规则：本轮要新建或改写的功能、技能、工具、提示词、Agent 预设，一律在本插件里实现并随插件打包 | `/create-in-purewhite`（`/` 后跟空格或行尾），不进模型技能目录 |
 
-这个技能随 `dsh-purewhite-toolkit` 插件加载时注册（`ctx.skills.register`），不需要单独软链。
+插件自带的技能随插件加载时注册（`ctx.skills.register`），不需要单独软链；`skills/` 下每个子目录一个技能，加目录就会被发现（`index.js` 自动扫描）。`create-in-purewhite` 的 frontmatter 写了 `disable-model-invocation: true`，只保留 `/` 手势入口。
+
+2026-11-18：`dsh-purewhite-toolkit` 新增 `blackboard`（南安普顿 Blackboard Ultra 取数）与 `create-in-purewhite`（新建能力收口到本插件）两个内置技能；`index.js` 现在会读 frontmatter 的 `disable-model-invocation` / `user-invocable` 并传进 `skills.register`，同时带上 `resourceBase`（插件根目录）。
 
 `humanizer-zh` 的历程：2026-11-09 从技能移到全局指令（正文并入 `config/AGENTS.md` 与 `~/.dsh/AGENTS.md`），2026-11-10 11:27 又从全局指令整段移除（本机备份 `~/.dsh/backups/AGENTS.md.before-remove-humanizer-20261110`）。需要原文时：`git show 28802bc:config/AGENTS.md` 取合并后的正文，`git checkout c8b7fa5 -- skills/humanizer-zh` 取最初的技能目录。
 
